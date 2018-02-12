@@ -1,4 +1,4 @@
-# SofaComponent
+# SofaComponents
 This library contains only auto-generated wrapper around Sofa component so they can be used 
 in an easy way in our plugins. 
 
