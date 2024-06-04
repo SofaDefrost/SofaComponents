@@ -1,0 +1,18 @@
+# .readthedocs.yml
+# Read the Docs configuration file
+# See https://docs.readthedocs.io/en/stable/config-file/v2.html for details
+
+# Required
+version: 2
+
+# Build documentation in the docs/ directory with Sphinx
+sphinx:
+  configuration: docs/sphinx/source/conf.py
+
+build:
+  os: "ubuntu-22.04"
+  commands:
+    - mkdir --parents $READTHEDOCS_OUTPUT/html/
+    - wget https://github.com/SofaDefrost/SofaComponents/releases/download/v24.06.beta/Sofa.Component_v24.06_docs.zip
+    - unzip Sofa.Component_v24.06_docs.zip
+    - cp --recursive build/html/* $READTHEDOCS_OUTPUT/html/
