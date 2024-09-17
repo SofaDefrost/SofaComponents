@@ -352,52 +352,6 @@ def create_stubs(code_model, target_path):
         if full_component_name in code_model:
             raise Exception("Already existing entry")
 
-        internal_code_model = {}
-        internal_code_model[full_component_name] = {
-                    "context" : target,
-                    "name" : class_name,
-                    "category" : "class",
-                        
-                    "description" : description.strip(),
-                    "links" :  [{"name": a["name"],
-                                         "type" : a["destinationTypeName"],
-                                         "description": clean_sofa_text(a["help"]) } for a in links],
-                    "datafields" : [{"name": a["name"],
-                                         "type" : a["type"],
-                                         "description": clean_sofa_text(a["help"])} for a in data],
-                    "examples" : []
-                }
-
-        def fill_context_model(context_model, target, name,type):
-            if len(target) <= 1:
-                return code_model
-                        
-            target_name = ".".join(target)
-            parent_context = target[:-1]
-            current_context = target[-1]
-            if target_name not in code_model:
-                code_model[target_name] = {
-                    "context" : ".".join(parent_context),
-                    "name" : current_context,
-                    "category" : "module",
-                    "description" : "",
-                    "content" : {},
-                    "depth" : len(parent_context)
-                }
-                        
-            if name not in internal_code_model[target_name]["content"]:
-                internal_code_model[target_name]["content"][name] = {"name":name, "type":type}  
-                fill_context_model(internal_code_model, parent_context, current_context, "module")
-                return internal_code_model       
-            
-            fill_context_model(internal_code_model, target.split("."), class_name, "class")
-
-            if name not in internal_code_model[target_name]["content"]:
-                internal_code_model[target_name]["content"][name] = {"name":name, "type":type}  
-                fill_context_model(internal_code_model, parent_context, current_context, "module")
-                return internal_code_model       
-            
-            fill_context_model(internal_code_model, target.split("."), class_name, "class")
     # In every directory, scan the object that are in and generates an init.py file 
     make_all_init_files(target_path)
     return code_model
