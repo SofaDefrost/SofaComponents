@@ -6,11 +6,12 @@ A sofa scene to autogenerate the python wrapping function from the runtime infor
 # -*- coding: utf-8 -*-
 import re
 import sys, os
-import Sofa
-from pathlib import Path
-
-import Sofa.Simulation
 import pprint
+import argparse
+
+import Sofa
+import Sofa.Simulation
+
 
 # from sphinx import make_mode
 reserved = ["in", "with", "for", "if", "def", "class", "global"]
@@ -138,9 +139,16 @@ def sofa_datafields_to_typehints(data_fields, mode="Sofa"):
 
     return p, p2
 
-def make_all_init_files(rootDir):
+def make_all_init_files(root_dir):
     entries = {}
-    for dirpath, dirnames, filenames in os.walk(rootDir):
+    for dirpath, dirnames, filenames in os.walk(root_dir):
+        # Test if the root_dir and the dirpath are the same to skip first entry
+        # This could be implemented by using [os.walk(root_dir)][1:] but in that case 
+        # python type hints get lost on my version 3.10. Maybe in a future python release
+        # this case will be handled
+        if os.path.abspath(root_dir) == os.path.abspath(dirpath):
+            continue 
+
         initfile = open(dirpath + "/__init__.py", "wt")
         res = []
         fres = []
@@ -167,14 +175,6 @@ Summary:
     
 \"\"\"  
 """ % (os.path.basename(dirpath), listc))
-        
-        #initfile.write("__all__=" + repr(fres) + "\n")
-        #for r in fres:
-        #    initfile.write(f"from {r} import {r}\n")
-        #initfile.close()
-
-        print(str((dirpath, dirnames, filenames)))
-
 
 def wrapper_code(class_name, description, data_list, properties_doc, 
                  class_typehints, params_typehints, 
@@ -357,11 +357,18 @@ def create_stubs(code_model, target_path):
     return code_model
 
 if __name__ == "__main__":
-    input_file = "Sofa"
-    output_directory = f"out/"
+    parser = argparse.ArgumentParser(
+                    prog='sofa-component-stub-generator',
+                    description='Generates python stubs that describes sofa components that have no binding')
+    parser.add_argument('--target_name', default="Sofa")  
+    parser.add_argument('--output_directory', default="out/")  
+    args = parser.parse_args()
 
-    print(f"Generating SOFA's components python interfaces for {input_file}")
+    target_name = args.target_name
+    output_directory = args.output_directory
 
-    components = load_component_list(input_file)
+    print(f"Generating SOFA's components python interfaces for {target_name}")
+
+    components = load_component_list(target_name)
     create_stubs(components, output_directory)
     
