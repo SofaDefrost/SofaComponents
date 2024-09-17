@@ -1,9 +1,10 @@
+# -*- coding: utf-8 -*-
 """
 A sofa scene to autogenerate the python wrapping function from the runtime informations.
 
+Contributors:
+    damien.marchal@univ-lille.fr
 """
-
-# -*- coding: utf-8 -*-
 import re
 import sys, os
 import pprint
@@ -12,8 +13,7 @@ import argparse
 import Sofa
 import Sofa.Simulation
 
-
-# from sphinx import make_mode
+# some data field cannot have names as this is a python keywoards. 
 reserved = ["in", "with", "for", "if", "def", "class", "global"]
 
 def sofa_to_python_typename(name, short=False):
@@ -30,6 +30,9 @@ def sofa_to_python_typename(name, short=False):
          "f" : "float",
          "i" : "int",
          "I" : "int",
+         "L" : "int",
+         "l" : "int",
+         "b" : "int"
          }
 
     SofaArray = "SofaArray"
@@ -46,6 +49,8 @@ def sofa_to_python_typename(name, short=False):
         return SofaArray
     elif "Vec" in name:
         return SofaArray
+    elif "Mat" in name:
+        return SofaArray 
     elif "Quat" in name:
         return SofaArray
     elif "map" in name:
@@ -68,11 +73,11 @@ def sofa_datafields_to_constructor_arguments_list(data_fields, object_name, has_
     for data_field in data_fields:
         name = data_field["name"]
         if name in reserved:
-            print("Warning: " + object_name + " contains a Data field which name is python keyword")
+            print(f"Warning: {object_name} contains a the data field named '{name}' which is also a python keyword")
             continue
 
         if " " in name:
-            print("Warning: this is an invalid arguments name: '" + name + "'")
+            print(f"Warning: this is an invalid arguments name: '{name}'")
             continue
 
         if len(name) == 0:
@@ -123,8 +128,8 @@ def sofa_datafields_to_typehints(data_fields, mode="Sofa"):
     p2 = ""
     for data in data_fields:
         name = data["name"]
-        help = data["help"]
-        type = data["type"]
+        help = clean_sofa_text(data["help"])
+        type = sofa_to_python_typename(data["type"])
         if len(name) == 0:
             continue
 
@@ -134,8 +139,8 @@ def sofa_datafields_to_typehints(data_fields, mode="Sofa"):
         if name in reserved:
             p += "    " + name + ": " + help + " (NB: use the kwargs syntax as name is a reserved word in python)\n\n"
         else:
-            p += f"    {name}: Data[{sofa_to_python_typename(type)}] \n    '{clean_sofa_text(help)}'\n\n"
-            p2 += f"        {name}: Optional[{sofa_to_python_typename(type)} | LinkPath] = None \n        '{clean_sofa_text(help)}'\n\n"
+            p += f"    {name}: Data[{type}] \n    '{help}'\n\n"
+            p2 += f"        {name}: Optional[{type} | LinkPath] = None \n        '{help}'\n\n"
 
     return p, p2
 
@@ -286,12 +291,19 @@ def load_component_list(target_name):
 
     selected_entries = []
     for item in json:
+        selected_item = None
         for type, entry in item["creator"].items():
             if entry["target"].startswith(target_name):
                 for data in entry["object"]["data"]: 
                     data["isRequired"] = True
-                selected_entries.append(item)
-    print("Number of objects ", len(selected_entries))
+                selected_item = item
+
+        if selected_item:
+            selected_entries.append(selected_item)
+    
+    print("Number of objects ", len(json))
+    print("Number of selected objects ", len(selected_entries))
+
     return selected_entries
 
 def create_stubs(code_model, target_path):
