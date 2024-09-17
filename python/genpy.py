@@ -284,13 +284,15 @@ def load_component_list(target_name):
 
     json = json.loads(Sofa.Core.ObjectFactory.dump_json())
 
+    selected_entries = []
     for item in json:
-        pprint(item)
         for type, entry in item["creator"].items():
             if entry["target"].startswith(target_name):
                 for data in entry["object"]["data"]: 
                     data["isRequired"] = True
-    return json
+                selected_entries.append(item)
+    print("Number of objects ", len(selected_entries))
+    return selected_entries
 
 def create_stubs(code_model, target_path):
     blacklist = ["RequiredPlugin"]
@@ -320,11 +322,6 @@ def create_stubs(code_model, target_path):
         if object_name in blacklist or class_name in blacklist:
             print("Skipping ", object_name)
             continue
-
-        print("### Processing: " + object_name)
-        print(f"TEMPLATES... {entry_templates}")
-        print(description)
-        pprint(selected_entry)
             
         data = selected_object["data"]   # obj.getDataFields()
         links = selected_object["link"]
