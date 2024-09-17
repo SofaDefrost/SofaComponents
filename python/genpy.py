@@ -9,6 +9,9 @@ import sys, os
 import Sofa
 from pathlib import Path
 
+import Sofa.Simulation
+import pprint
+
 # from sphinx import make_mode
 reserved = ["in", "with", "for", "if", "def", "class", "global"]
 
@@ -52,49 +55,60 @@ def sofa_to_python_typename(name, short=False):
 
 
 def sofa_datafields_to_constructor_arguments_list(data_fields, object_name, has_template=True):
+    #{'defaultValue': '0',
+    #                 'group': '',
+    #                 'help': 'if true, handle the events, otherwise ignore '
+    #                         'the events',
+    #                 'name': 'listening',
+    #                 'type': 'bool'},
     required_data_fields = []
     optional_data_fields = []
 
     for data_field in data_fields:
-        if data_field.getName() in reserved:
+        name = data_field["name"]
+        if name in reserved:
             print("Warning: " + object_name + " contains a Data field which name is python keyword")
             continue
 
-        if " " in data_field.getName():
-            print("Warning: this is an invalid arguments name: '" + repr(data_field.getName()) + "'")
+        if " " in name:
+            print("Warning: this is an invalid arguments name: '" + name + "'")
             continue
 
-        if len(data_field.getName()) != 0:
-            if data_field.isRequired():
-                required_data_fields.append(data_field)
-            else:
-                optional_data_fields.append(data_field)
+        if len(name) == 0:
+            print("Warning: empty data field empty name")
+            continue
+
+        if data_field["isRequired"]:
+            required_data_fields.append(data_field)
+        else:
+            optional_data_fields.append(data_field)
 
     result_params = ""
     if has_template:
         result_params = "template: Optional[str] = None, "
-    result_params += ",".join([data.getName()+": "+sofa_to_python_typename(data.getValueTypeString()) for data in required_data_fields])
-    result_params += ",".join([data.getName()+": Optional["+sofa_to_python_typename(data.getValueTypeString())+"] = None" for data in optional_data_fields])
+    result_params += ",".join([data["name"]+": "+sofa_to_python_typename(data["type"]) for data in required_data_fields])
+    result_params += ",".join([data["name"]+": Optional["+sofa_to_python_typename(data["type"])+"] = None" for data in optional_data_fields])
 
-    ordered_fields = sorted(data_fields, key=lambda x: x.getName())
+    ordered_fields = sorted(data_fields, key=lambda x: x["name"])
 
-    all = "\n           ".join( [ data.getName()+" ("+sofa_to_python_typename(data.getValueTypeString(), short=True)+"):   " + data.getHelp() for data in ordered_fields])
+    all = "\n           ".join( [ data["name"]+" ("+sofa_to_python_typename(data["type"], short=True)+"):   " + data["help"] for data in ordered_fields])
     all += "\n           template (str): the type of degree of freedom"
     return result_params, all
 
 def sofa_datafields_to_doc(data_fields):
     p = ""
-    for data_field in data_fields:
-        if len(data_field.getName()) == 0:
+    for data in data_fields:
+        name = data["name"]
+        help = data["help"]
+        if len(name) == 0:
             continue
-        if " " in data_field.getName():
+        if " " in name:
             continue
 
-        if data_field.getName() in reserved:
-            p += "\t\t " + data_field.getName() + ": " + str(
-                data_field.getHelp()) + " (NB: use the kwargs syntax as name is a reserved word in python)\n\n"
+        if name in reserved:
+            p += "\t\t " + name + ": " + help + " (NB: use the kwargs syntax as name is a reserved word in python)\n\n"
         else:
-            p += "\t\t " + data_field.getName() + ": " + str(data_field.getHelp()) + "\n\n"
+            p += "\t\t " + name + ": " + help + "\n\n"
 
     return p
 
@@ -106,23 +120,25 @@ def clean_sofa_text(t):
 def sofa_datafields_to_typehints(data_fields, mode="Sofa"):
     p = ""
     p2 = ""
-    for data_field in data_fields:
-        if len(data_field.getName()) == 0:
+    for data in data_fields:
+        name = data["name"]
+        help = data["help"]
+        type = data["type"]
+        if len(name) == 0:
             continue
 
-        if " " in data_field.getName():
+        if " " in name:
             continue
 
-        if data_field.getName() in reserved:
-            p += "    " + data_field.getName() + ": " + str(
-                data_field.getHelp()) + " (NB: use the kwargs syntax as name is a reserved word in python)\n\n"
+        if name in reserved:
+            p += "    " + name + ": " + help + " (NB: use the kwargs syntax as name is a reserved word in python)\n\n"
         else:
-            p += f"    {data_field.getName()}: Data[{sofa_to_python_typename(data_field.getValueTypeString())}] \n    '{clean_sofa_text(data_field.getHelp())}'\n\n"
-            p2 += f"        {data_field.getName()}: Optional[{sofa_to_python_typename(data_field.getValueTypeString())} | LinkPath] = None \n        '{clean_sofa_text(data_field.getHelp())}'\n\n"
+            p += f"    {name}: Data[{sofa_to_python_typename(type)}] \n    '{clean_sofa_text(help)}'\n\n"
+            p2 += f"        {name}: Optional[{sofa_to_python_typename(type)} | LinkPath] = None \n        '{clean_sofa_text(help)}'\n\n"
 
     return p, p2
 
-def makeInitFile(rootDir):
+def make_all_init_files(rootDir):
     entries = {}
     for dirpath, dirnames, filenames in os.walk(rootDir):
         initfile = open(dirpath + "/__init__.py", "wt")
@@ -213,25 +229,8 @@ Indices and tables
 \"\"\"
 """ % (class_name, class_name)
 
-
-def create_mechanical_object_from_templates(templates, root_node):
-    templates = templates.split(',')
-    if len(templates) == 0:
-        return root_node
-    if len(templates) == 1:
-        root_node.addObject("MechanicalObject", template=templates[0], name='MO<' + templates[0] + '>')
-        return root_node
-    if len(templates) >= 2:        
-        child1 = root_node.addChild("child1")        
-        root_node.addObject("MechanicalObject", template=templates[0], name='MO<' + templates[0] + '>')
-        child1.addObject("MechanicalObject", template=templates[1], name='M1<' + templates[1] + '>')
-        return child1 
-    raise Exception("Broken code "+str(templates))
-
-
-def select_single_template(default_template, template_list):
-    if default_template:
-        return default_template
+def select_single_template(template_list):
+    """ returns a single template"""
     for dim in ["Vec3", "Rigid3", "Vec2", "Rigid2", "Vec1", "Quatd"]:
         for template in template_list:
             if "Cuda" not in template and dim in template:
@@ -268,197 +267,147 @@ SofaArray = numpy.ndarray | list
     with open(pathname,"w") as w:
         w.write(c)
 
-def create_sphinxdoc(code_model : dict, destination : str):
-    """Generates the sphinx documentation for the corresponding code_model"""
+from pprint import pprint
 
-    # for each entry in the code, 
-    for component_qualified_name, entry in code_model.items():
+def load_component_list(target_name):
+    import json
+    import Sofa
+    import Sofa.Core
+    import SofaRuntime
+    
+    if target_name in ["Sofa"]:
+        # The binding is not a sofa plugin. 
+        print("Loading a python module")
+    else:
+        print("Loading a sofa plugin")
+        SofaRuntime.importPlugin(target_name)
 
-        if entry["category"] == "class":
-            context = entry["context"]
-            name = entry["name"]
-            description = entry["description"]
+    json = json.loads(Sofa.Core.ObjectFactory.dump_json())
 
-            attributes = "\n".join([f" - {a['name']} : {a['description']}" for a in entry["datafields"] ]) 
-            links = "\n".join([f" - {a['name']} : {a['description']}" for a in entry["links"] ]) 
+    for item in json:
+        pprint(item)
+        for type, entry in item["creator"].items():
+            if entry["target"].startswith(target_name):
+                for data in entry["object"]["data"]: 
+                    data["isRequired"] = True
+    return json
 
-            context_path = context.replace(".","/")
-            destination_pathname = Path(destination, context_path)
-            if not os.path.exists(destination_pathname):
-                destination_pathname.mkdir(parents=True)
-
-            component_pathname = os.path.join(destination_pathname, name+".rst")
-            outfile = open(component_pathname, "wt")
-            qname = context+"."+name
-            outfile.write(f"""{name}
-{"-"*len(name)}
-
-Context: {context}
-
-{description}
-
-Data:
-{attributes}
-
-Links:
-{links}
-""")
-            print(f"Writing doc entry at: {destination_pathname}/ for {name}.rst")
-        else:
-            context = entry["context"]
-            name = entry["name"]
-            description = entry["description"]
-            depth = entry["depth"]
-
-            d = ["#", "*", "=", "-", "^", "=", "="]
-            s = d[depth]
-            
-            content_modules = "\n".join([ f"   {a['name']}/index" for a in entry["content"].values() if a["type"] == "module" ])
-            content_class = "\n".join([ f"   {a['name']}" for a in entry["content"].values() if a["type"] != "module" ])
-
-            context_path = context.replace(".","/")
-            destination_pathname = Path(destination, context_path, name)
-            if not os.path.exists(destination_pathname):
-                destination_pathname.mkdir(parents=True)
-
-            component_pathname = os.path.join(destination_pathname, "index.rst")
-            outfile = open(component_pathname, "wt")
-            qname = context+"."+name
-            outfile.write(f"""{name}
-{s*len(name)}
-
-.. toctree::
-   :maxdepth: 4
-
-{content_modules}
-{content_class}
-
-""")
-            print(f"Writing doc module at: {destination_pathname}/ for {name}.rst")
-                                      
-
-def create_stubs():
+def create_stubs(code_model, target_path):
     blacklist = ["RequiredPlugin"]
 
     template_nodes = dict()
     not_created_objects = list()
 
-    target_path = "out/"
-
     create_typhint(target_path + "Sofa/Component/TypeHints.py")
 
-    code_model = {}
+    for entry in code_model:
+        data = {}
 
-    for entry in Sofa.Core.ObjectFactory.components:
+        class_name = entry["className"]
+        entry_templates = [n for n in entry["creator"].keys()]
+        description = entry["description"]
+        
+        selected_template = select_single_template(entry_templates)
+        selected_entry = entry["creator"][selected_template]
+        selected_class = selected_entry["class"]
+        selected_object = selected_entry["object"]
+        selected_target = selected_entry["target"]
 
-        args = {}
-        if entry.className not in blacklist:
-            # entry_templates = entry.templates
-            entry_templates = ['']
-            if len(entry.templates) > 0:
-                entry_templates = [select_single_template(entry.defaultTemplate, entry.templates)]
+        if len(selected_target) == 0:
+            selected_target = "unknown_target"
 
-            for entry_template in entry_templates:
-                target = "unknown_target"
-                object_name = entry.className + "<" + entry_template + ">"
-                if object_name not in blacklist and entry.className not in blacklist:
-                    try:
-                        print("### Processing: " + object_name)
-                        tmpnode = Sofa.Core.Node("tmpnode")
-                        node = create_mechanical_object_from_templates(entry_template, tmpnode)
-                        print("node: ", [n.name.value for n in node.objects])
-                        if len(entry_template) == 0:
-                            obj = node.addObject(entry.className, name=entry.className)
-                        else:
-                            obj = node.addObject(entry.className, template=entry_template, name=entry.className)
-                        args = obj.getDataFields()
-                        links = obj.getLinks()
-                        target = obj.getTarget()
-                        obj.getContext().removeObject(obj)
-                    except Exception as e:
-                        not_created_objects.append(object_name)
-                        print("Unable to get DOC: " + str(e))
-                        continue
+        object_name = class_name + "<" + selected_template + ">"
+        if object_name in blacklist or class_name in blacklist:
+            print("Skipping ", object_name)
+            continue
 
-                    if not target:
-                        target = "unknown_target"
+        print("### Processing: " + object_name)
+        print(f"TEMPLATES... {entry_templates}")
+        print(description)
+        pprint(selected_entry)
+            
+        data = selected_object["data"]   # obj.getDataFields()
+        links = selected_object["link"]
+        target = selected_target
+            
+        arguments_list, constructor_params_doc = sofa_datafields_to_constructor_arguments_list(data, object_name, len(entry_templates) > 0)
+        params_doc = sofa_datafields_to_doc(data)
+        class_typehint, params_typehint = sofa_datafields_to_typehints(data)
+        code = wrapper_code(class_name, description.strip(), arguments_list, params_doc, 
+                                class_typehint, params_typehint, 
+                                arguments_list, constructor_params_doc)
 
-                    arguments_list, constructor_params_doc = sofa_datafields_to_constructor_arguments_list(args, object_name, len(entry.templates) > 0)
-                    params_doc = sofa_datafields_to_doc(args)
-                    class_typehint, params_typehint = sofa_datafields_to_typehints(args)
-                    code = wrapper_code(entry.className, entry.description.strip(), arguments_list, params_doc, 
-                                        class_typehint, params_typehint, 
-                                        arguments_list, constructor_params_doc)
+        pathname = target_path + target.replace(".","/") + "/"
+        full_component_name = target + "." + class_name
 
-                    pathname = target_path + target.replace(".","/") + "/"
-                    full_component_name = target + "." + entry.className
+        # Creates the destination directory if needed. 
+        os.makedirs(pathname, exist_ok=True)
 
-                    from pathlib import Path
-                    path = Path(pathname)
-                    if not os.path.exists(pathname):
-                        path.mkdir(parents=True)
+        outfile = open(pathname + class_name + ".py", "wt")
+        outfile.write("# -*- coding: utf-8 -*-\n\n")
+        outfile.write(documentation_code(class_name))
+        outfile.write(code)
+        outfile.close()
 
-                    outfile = open(pathname + entry.className + ".py", "wt")
-                    outfile.write("# -*- coding: utf-8 -*-\n\n")
-                    outfile.write(documentation_code(entry.className))
-                    outfile.write(code)
-                    outfile.close()
+        if full_component_name in code_model:
+            raise Exception("Already existing entry")
 
-                    if full_component_name in code_model:
-                        raise Exception("Already existing entry")
-
-                    code_model[full_component_name] = {
-                        "context" : target,
-                        "name" : entry.className,
-                        "category" : "class",
+        internal_code_model = {}
+        internal_code_model[full_component_name] = {
+                    "context" : target,
+                    "name" : class_name,
+                    "category" : "class",
                         
-                        "description" : entry.description.strip(),
-                        "links" :  [{"name": a.getName(),
-                                         "type" : a.getValueTypeString(),
-                                         "description": clean_sofa_text(a.getHelp()) } for a in links],
-                        "datafields" : [{"name": a.getName(),
-                                         "type" : clean_sofa_text(a.getValueTypeString()),
-                                         "description": a.getHelp() } for a in args],
-                        "examples" : []
-                    }
+                    "description" : description.strip(),
+                    "links" :  [{"name": a["name"],
+                                         "type" : a["destinationTypeName"],
+                                         "description": clean_sofa_text(a["help"]) } for a in links],
+                    "datafields" : [{"name": a["name"],
+                                         "type" : a["type"],
+                                         "description": clean_sofa_text(a["help"])} for a in data],
+                    "examples" : []
+                }
 
-
-                    def fill_context_model(context_model, target, name,type):
-                        if len(target) <= 1:
-                            return code_model
+        def fill_context_model(context_model, target, name,type):
+            if len(target) <= 1:
+                return code_model
                         
-                        target_name = ".".join(target)
-                        parent_context = target[:-1]
-                        current_context = target[-1]
-                        if target_name not in code_model:
-                            code_model[target_name] = {
-                                "context" : ".".join(parent_context),
-                                "name" : current_context,
-                                "category" : "module",
-                                "description" : "",
-                                "content" : {},
-                                "depth" : len(parent_context)
-                            }
+            target_name = ".".join(target)
+            parent_context = target[:-1]
+            current_context = target[-1]
+            if target_name not in code_model:
+                code_model[target_name] = {
+                    "context" : ".".join(parent_context),
+                    "name" : current_context,
+                    "category" : "module",
+                    "description" : "",
+                    "content" : {},
+                    "depth" : len(parent_context)
+                }
                         
-                        if name not in code_model[target_name]["content"]:
-                            code_model[target_name]["content"][name] = {"name":name, "type":type}  
+            if name not in internal_code_model[target_name]["content"]:
+                internal_code_model[target_name]["content"][name] = {"name":name, "type":type}  
+                fill_context_model(internal_code_model, parent_context, current_context, "module")
+                return internal_code_model       
+            
+            fill_context_model(internal_code_model, target.split("."), class_name, "class")
 
-                        fill_context_model(code_model, parent_context, current_context, "module")
-
-                        return code_model
-                    
-                    fill_context_model(code_model, target.split("."), entry.className, "class")
-
-
-    makeInitFile(target_path+"/Sofa")
-    print("\n\n\nPROCESSING DONE")
-    # make_mode.run_make_mode(sys.argv[2:])
-
-    print('\n\n\nObjects that could not be created:')
-    print(not_created_objects)
+            if name not in internal_code_model[target_name]["content"]:
+                internal_code_model[target_name]["content"][name] = {"name":name, "type":type}  
+                fill_context_model(internal_code_model, parent_context, current_context, "module")
+                return internal_code_model       
+            
+            fill_context_model(internal_code_model, target.split("."), class_name, "class")
+    # In every directory, scan the object that are in and generates an init.py file 
+    make_all_init_files(target_path)
     return code_model
 
 if __name__ == "__main__":
-    print("Generating Sofa.Components stubs...")
-    code_model = create_stubs()
-    create_sphinxdoc(code_model, "../docs/sphinx/source/content/modules")
+    input_file = "Sofa"
+    output_directory = f"out/"
+
+    print(f"Generating SOFA's components python interfaces for {input_file}")
+
+    components = load_component_list(input_file)
+    create_stubs(components, output_directory)
+    
