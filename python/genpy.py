@@ -32,12 +32,13 @@ def sofa_to_python_typename(name, short=False):
          "I" : "int",
          "L" : "int",
          "l" : "int",
-         "b" : "int"
+         "b" : "int",
+         "LinkPath" : "LinkPath"
          }
 
-    SofaArray = "SofaArray"
+    SofaArray = "TypeHints.SofaArray"
     if short:
-        SofaArray = "SofaArray"
+        SofaArray = "TypeHints.SofaArray"
 
     if name in t:
         return t[name]
@@ -334,10 +335,13 @@ def create_stubs(code_model, target_path):
         if object_name in blacklist or class_name in blacklist:
             print("Skipping ", object_name)
             continue
-            
+
+
         data = selected_object["data"]   # obj.getDataFields()
         links = selected_object["link"]
         target = selected_target
+
+        load_existing_stub(selected_target, class_name)
             
         arguments_list, constructor_params_doc = sofa_datafields_to_constructor_arguments_list(data, object_name, len(entry_templates) > 0)
         params_doc = sofa_datafields_to_doc(data)
